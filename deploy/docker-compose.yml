@@ -1,5 +1,6 @@
 # Help Desk no servidor .160: API, Worker e RabbitMQ. O MongoDB continua no .142, alcançado por túnel SSH.
-# Passo a passo em README.md. Valores vêm de .env (nunca versionado).
+# Passo a passo em README.md. Valores vêm de .env (CLI) ou das variáveis da stack (Portainer), nunca versionados.
+# Sem montagens de caminho relativo: o Portainer CE guarda o código dentro do próprio container.
 
 name: helpdesk
 
@@ -20,12 +21,12 @@ x-backend: &backend
       condition: service_completed_successfully
     mongo-tunnel:
       condition: service_healthy
-      required: false
 
 services:
   api:
     <<: *backend
     image: helpdesk-api:${IMAGE_TAG:-latest}
+    pull_policy: build
     build:
       context: ../backend
       dockerfile: ../deploy/Dockerfile.backend
@@ -49,6 +50,7 @@ services:
   worker:
     <<: *backend
     image: helpdesk-worker:${IMAGE_TAG:-latest}
+    pull_policy: build
     build:
       context: ../backend
       dockerfile: ../deploy/Dockerfile.backend
@@ -80,15 +82,16 @@ services:
 
   # Declara exchanges, filas e ligações (idempotente). Não cria usuários.
   rabbitmq-init:
-    image: curlimages/curl:8.11.1
+    image: helpdesk-rabbitmq-init:${IMAGE_TAG:-latest}
+    pull_policy: build
+    build:
+      context: ./rabbitmq-init
     depends_on:
       rabbitmq:
         condition: service_healthy
     environment:
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
-    volumes:
-      - ./rabbitmq-topology.json:/topology.json:ro
     networks: [broker]
     entrypoint: ["sh", "-c"]
     command:
@@ -99,8 +102,8 @@ services:
     restart: "no"
 
   mongo-tunnel:
-    profiles: ["tunnel"]
     image: helpdesk-mongo-tunnel:${IMAGE_TAG:-latest}
+    pull_policy: build
     build:
       context: ./tunnel
     restart: unless-stopped
@@ -109,7 +112,8 @@ services:
       TUNNEL_SSH_PORT: ${MONGO_TUNNEL_SSH_PORT:-22}
       TUNNEL_REMOTE_PORT: ${MONGO_TUNNEL_REMOTE_PORT:-27018}
     volumes:
-      - ${TUNNEL_SECRETS_DIR:-./secrets}:/run/tunnel:ro
+      # Pasta no servidor (fora do repositório) com tunnel_key e known_hosts.
+      - ${TUNNEL_SECRETS_DIR:-/opt/helpdesk-secrets}:/run/tunnel:ro
     networks: [data, uplink]
     healthcheck:
       test: ["CMD", "nc", "-z", "127.0.0.1", "27018"]
@@ -135,11 +139,11 @@ services:
     restart: unless-stopped
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-}
+    command: ["sh", "-c", "exec caddy reverse-proxy --from \"$$PUBLIC_DOMAIN\" --to api:8080"]
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
     depends_on: [api]
     networks: [edge]

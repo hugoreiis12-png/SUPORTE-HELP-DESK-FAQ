@@ -34,7 +34,7 @@ echo
 
 umask 077
 cat > .env <<EOF
-COMPOSE_PROFILES=tunnel
+TUNNEL_SECRETS_DIR=/opt/helpdesk-secrets
 
 PUBLIC_API_URL=https://${api_host}/
 
