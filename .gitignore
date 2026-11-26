@@ -1,0 +1,24 @@
+# .NET
+backend/**/bin/
+backend/**/obj/
+backend/**/TestResults/
+backend/.vs/
+# Front (Vite/Bun)
+front_end/**/node_modules/
+front_end/**/dist/
+# Segredos e ambiente local
+.env
+.env.*
+!.env.example
+*.log
+
+# Saída do build para o Bubble (gerada por: bun run build:bubble)
+front_end/**/dist-bubble/
+
+# Chave do túnel SSH do deploy
+deploy/secrets/
+
+# Cópia antiga do backend, só local
+_backup_*/
+# O front tem repositório próprio
+front_end/SUPORTE-HELP-DESK-/

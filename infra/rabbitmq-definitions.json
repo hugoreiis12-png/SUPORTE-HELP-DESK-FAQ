@@ -1,0 +1,211 @@
+{
+  "rabbit_version": "3.13",
+  "users": [
+    {
+      "name": "guest",
+      "password_hash": "otaia+QZH0LQN5Rmuv44S682gNtTdALFsU9lgZaR2nJtMI2Y",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator",
+      "limits": {}
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "guest",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "topic_permissions": [],
+  "parameters": [],
+  "global_parameters": [
+    {
+      "name": "cluster_name",
+      "value": "helpdesk@rabbit"
+    }
+  ],
+  "policies": [],
+  "exchanges": [
+    {
+      "name": "helpdesk.topic",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "helpdesk.dlx",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "ticket.created.classification",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic",
+        "x-dead-letter-exchange": "helpdesk.dlx",
+        "x-dead-letter-routing-key": "ticket.created.classification.dlq"
+      }
+    },
+    {
+      "name": "ticket.classified.dispatch",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic",
+        "x-dead-letter-exchange": "helpdesk.dlx",
+        "x-dead-letter-routing-key": "ticket.classified.dispatch.dlq"
+      }
+    },
+    {
+      "name": "ticket.resolved.notify",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic",
+        "x-dead-letter-exchange": "helpdesk.dlx",
+        "x-dead-letter-routing-key": "ticket.resolved.notify.dlq"
+      }
+    },
+    {
+      "name": "integration.comprove.query",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic",
+        "x-dead-letter-exchange": "helpdesk.dlx",
+        "x-dead-letter-routing-key": "integration.comprove.query.dlq"
+      }
+    },
+    {
+      "name": "ticket.created.classification.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic"
+      }
+    },
+    {
+      "name": "ticket.classified.dispatch.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic"
+      }
+    },
+    {
+      "name": "ticket.resolved.notify.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic"
+      }
+    },
+    {
+      "name": "integration.comprove.query.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "helpdesk.topic",
+      "vhost": "/",
+      "destination": "ticket.created.classification",
+      "destination_type": "queue",
+      "routing_key": "helpdesk.ticket.created",
+      "arguments": {}
+    },
+    {
+      "source": "helpdesk.topic",
+      "vhost": "/",
+      "destination": "ticket.classified.dispatch",
+      "destination_type": "queue",
+      "routing_key": "helpdesk.ticket.updated",
+      "arguments": {}
+    },
+    {
+      "source": "helpdesk.topic",
+      "vhost": "/",
+      "destination": "ticket.classified.dispatch",
+      "destination_type": "queue",
+      "routing_key": "helpdesk.ticket.status-changed",
+      "arguments": {}
+    },
+    {
+      "source": "helpdesk.topic",
+      "vhost": "/",
+      "destination": "ticket.resolved.notify",
+      "destination_type": "queue",
+      "routing_key": "helpdesk.ticket.resolved",
+      "arguments": {}
+    },
+    {
+      "source": "helpdesk.topic",
+      "vhost": "/",
+      "destination": "integration.comprove.query",
+      "destination_type": "queue",
+      "routing_key": "helpdesk.integration.comprove.query",
+      "arguments": {}
+    },
+    {
+      "source": "helpdesk.dlx",
+      "vhost": "/",
+      "destination": "ticket.created.classification.dlq",
+      "destination_type": "queue",
+      "routing_key": "ticket.created.classification.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "helpdesk.dlx",
+      "vhost": "/",
+      "destination": "ticket.classified.dispatch.dlq",
+      "destination_type": "queue",
+      "routing_key": "ticket.classified.dispatch.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "helpdesk.dlx",
+      "vhost": "/",
+      "destination": "ticket.resolved.notify.dlq",
+      "destination_type": "queue",
+      "routing_key": "ticket.resolved.notify.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "helpdesk.dlx",
+      "vhost": "/",
+      "destination": "integration.comprove.query.dlq",
+      "destination_type": "queue",
+      "routing_key": "integration.comprove.query.dlq",
+      "arguments": {}
+    }
+  ]
+}

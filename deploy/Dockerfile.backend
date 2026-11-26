@@ -1,0 +1,15 @@
+# Imagem da API ou do Worker: --build-arg PROJECT=Api|Worker. Contexto: pasta backend/.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG PROJECT
+WORKDIR /src
+COPY global.json NuGet.Config Directory.Build.props ./
+COPY src/ src/
+RUN dotnet publish "src/Comprove.HelpDesk.${PROJECT}/Comprove.HelpDesk.${PROJECT}.csproj" -c Release -o /app /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+ARG PROJECT
+ENV APP_DLL="Comprove.HelpDesk.${PROJECT}.dll"
+WORKDIR /app
+COPY --from=build /app .
+USER $APP_UID
+ENTRYPOINT ["sh", "-c", "exec dotnet \"$APP_DLL\""]

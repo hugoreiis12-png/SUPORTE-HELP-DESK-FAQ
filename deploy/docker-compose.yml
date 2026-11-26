@@ -1,0 +1,159 @@
+# Help Desk no servidor .160: API, Worker e RabbitMQ. O MongoDB continua no .142, alcançado por túnel SSH.
+# Passo a passo em README.md. Valores vêm de .env (nunca versionado).
+
+name: helpdesk
+
+x-backend-env: &backend-env
+  DOTNET_ENVIRONMENT: Production
+  ConnectionStrings__HelpDeskMongo: ${MONGO_CONNECTION_STRING:?defina MONGO_CONNECTION_STRING no .env}
+  RabbitMq__Host: rabbitmq
+  RabbitMq__UserName: ${RABBITMQ_USER:?defina RABBITMQ_USER no .env}
+  RabbitMq__Password: ${RABBITMQ_PASSWORD:?defina RABBITMQ_PASSWORD no .env}
+  Storage__PublicBaseUrl: ${PUBLIC_API_URL:?defina PUBLIC_API_URL no .env}
+  Storage__LinkSigningKey: ${STORAGE_LINK_SIGNING_KEY:?defina STORAGE_LINK_SIGNING_KEY no .env}
+
+x-backend: &backend
+  restart: unless-stopped
+  networks: [broker, data, edge]
+  depends_on:
+    rabbitmq-init:
+      condition: service_completed_successfully
+    mongo-tunnel:
+      condition: service_healthy
+      required: false
+
+services:
+  api:
+    <<: *backend
+    image: helpdesk-api:${IMAGE_TAG:-latest}
+    build:
+      context: ../backend
+      dockerfile: ../deploy/Dockerfile.backend
+      args:
+        PROJECT: Api
+    environment:
+      <<: *backend-env
+      ASPNETCORE_ENVIRONMENT: Production
+      BubbleSecurity__SigningKey: ${BUBBLE_SIGNING_KEY:?defina BUBBLE_SIGNING_KEY no .env}
+      # Substitui o localhost de desenvolvimento do appsettings.json.
+      Cors__AllowedOrigins__1: ${EXTRA_CORS_ORIGIN:-https://comprover.bubbleapps.io}
+    ports:
+      # Por padrão só o próprio servidor alcança a porta; o acesso externo é pelo HTTPS.
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-5112}:8080"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  worker:
+    <<: *backend
+    image: helpdesk-worker:${IMAGE_TAG:-latest}
+    build:
+      context: ../backend
+      dockerfile: ../deploy/Dockerfile.backend
+      args:
+        PROJECT: Worker
+    environment:
+      <<: *backend-env
+      OpenWa__Enabled: ${OPENWA_ENABLED:-false}
+      OpenWa__BaseUrl: ${OPENWA_BASE_URL:-}
+      OpenWa__SessionId: ${OPENWA_SESSION_ID:-}
+      OpenWa__ApiKey: ${OPENWA_API_KEY:-}
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    restart: unless-stopped
+    # O nome do nó faz parte do diretório de dados: não alterar depois da primeira subida.
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks: [broker]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+
+  # Declara exchanges, filas e ligações (idempotente). Não cria usuários.
+  rabbitmq-init:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    volumes:
+      - ./rabbitmq-topology.json:/topology.json:ro
+    networks: [broker]
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors
+        --user "$$RABBITMQ_USER:$$RABBITMQ_PASSWORD" --header "Content-Type: application/json"
+        --data-binary @/topology.json http://rabbitmq:15672/api/definitions
+    restart: "no"
+
+  mongo-tunnel:
+    profiles: ["tunnel"]
+    image: helpdesk-mongo-tunnel:${IMAGE_TAG:-latest}
+    build:
+      context: ./tunnel
+    restart: unless-stopped
+    environment:
+      TUNNEL_TARGET: ${MONGO_TUNNEL_TARGET:-}
+      TUNNEL_SSH_PORT: ${MONGO_TUNNEL_SSH_PORT:-22}
+      TUNNEL_REMOTE_PORT: ${MONGO_TUNNEL_REMOTE_PORT:-27018}
+    volumes:
+      - ${TUNNEL_SECRETS_DIR:-./secrets}:/run/tunnel:ro
+    networks: [data, uplink]
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "27018"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # HTTPS, opção A: túnel da Cloudflare (não abre portas no firewall).
+  cloudflared:
+    profiles: ["cloudflare"]
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:latest}
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on: [api]
+    networks: [edge]
+
+  # HTTPS, opção B: proxy com certificado automático (precisa de domínio e portas 80/443).
+  caddy:
+    profiles: ["caddy"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [api]
+    networks: [edge]
+
+networks:
+  broker:
+    internal: true
+  # Só API, Worker e túnel: o RabbitMQ e o HTTPS não enxergam o caminho até o banco.
+  data:
+    internal: true
+  edge:
+  # Saída do túnel até o .142.
+  uplink:
+
+volumes:
+  rabbitmq_data:
+  caddy_data:

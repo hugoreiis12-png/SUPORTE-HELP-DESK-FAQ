@@ -1,0 +1,4 @@
+# Executados no Linux: sempre com final de linha LF.
+*.sh text eol=lf
+Dockerfile* text eol=lf
+deploy/** text eol=lf
