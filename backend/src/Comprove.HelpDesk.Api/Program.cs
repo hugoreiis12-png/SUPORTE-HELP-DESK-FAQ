@@ -24,6 +24,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<PrivateNetworkAccessMiddleware>();
 app.UseCors(HelpDeskCorsOptions.PolicyName);
 app.UseAuthentication();
 app.UseAuthorization();
